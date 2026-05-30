@@ -202,6 +202,7 @@ async def add_profile_sample(
     audio_path: str,
     reference_text: str,
     db: Session,
+    min_duration: float = 2.0,
 ) -> ProfileSampleResponse:
     """
     Add a sample to a voice profile.
@@ -211,6 +212,9 @@ async def add_profile_sample(
         audio_path: Path to temporary audio file
         reference_text: Transcript of audio
         db: Database session
+        min_duration: Minimum acceptable clip length in seconds. Defaults to
+            2.0 so the desktop-app path keeps its existing gate; callers (e.g.
+            the MCP batch importer) can raise it.
 
     Returns:
         Created sample
@@ -223,7 +227,7 @@ async def add_profile_sample(
 
     # Validate and load audio in a single pass, off the event loop
     is_valid, error_msg, audio, sr = await asyncio.to_thread(
-        validate_and_load_reference_audio, audio_path
+        validate_and_load_reference_audio, audio_path, min_duration
     )
     if not is_valid:
         raise ValueError(f"Invalid reference audio: {error_msg}")
@@ -622,6 +626,58 @@ async def create_voice_prompt_for_profile(
         use_cache=use_cache,
     )
     return voice_prompt
+
+
+async def warm_voice_prompt(
+    profile_id: str,
+    db: Session,
+    engine: str | None = None,
+) -> dict:
+    """Eagerly (re)encode a cloned profile's combined voice prompt.
+
+    Voicebox does zero-shot cloning — there is no model training. Adding a
+    sample already invalidates the cached prompt; this forces a fresh encode
+    now (``use_cache=False``) so the next ``speak`` is instant and so callers
+    can confirm the updated sample set actually encodes.
+
+    Returns ``{"status": "ready", "sample_count": N, "engine": ...}``.
+    Raises ``ValueError`` if the profile is missing, not cloned, or has no
+    samples.
+    """
+    profile = db.query(DBVoiceProfile).filter_by(id=profile_id).first()
+    if not profile:
+        raise ValueError(f"Profile {profile_id} not found")
+
+    voice_type = getattr(profile, "voice_type", None) or "cloned"
+    if voice_type != "cloned":
+        raise ValueError(
+            f"Profile '{profile.name}' is a {voice_type} voice; only cloned "
+            "voices can be retrained from samples."
+        )
+
+    resolved_engine = engine or profile.default_engine or "qwen"
+    if resolved_engine not in CLONING_ENGINES:
+        resolved_engine = "qwen"
+
+    sample_count = (
+        db.query(DBProfileSample).filter_by(profile_id=profile_id).count()
+    )
+    if sample_count == 0:
+        raise ValueError(
+            f"Profile '{profile.name}' has no samples to encode."
+        )
+
+    # Drop any stale cache, then force a fresh encode of the combined prompt.
+    clear_profile_cache(profile_id)
+    await create_voice_prompt_for_profile(
+        profile_id, db, use_cache=False, engine=resolved_engine
+    )
+
+    return {
+        "status": "ready",
+        "sample_count": sample_count,
+        "engine": resolved_engine,
+    }
 
 
 async def upload_avatar(

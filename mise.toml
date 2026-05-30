@@ -1,0 +1,226 @@
+[tools]
+bun = "latest"
+node = "latest"
+python = "3.12"
+rust = "latest"
+
+# ─── Dev tasks (port of the justfile, macOS/Linux) ─────────────────────
+# Usage:  mise run setup   |   mise run dev   |   mise run test
+# List:   mise tasks
+
+[tasks.setup]
+description = "Full project setup (python venv + JS deps)"
+depends = ["setup-python", "setup-js"]
+run = 'echo "" && echo "Setup complete! Run: mise run dev"'
+
+[tasks.setup-python]
+description = "Create venv and install Python dependencies"
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+# Disk-constrained: don't let pip mirror every wheel into ~/Library/Caches/pip.
+export PIP_NO_CACHE_DIR=1
+if [ ! -d "backend/venv" ]; then
+    echo "Creating Python virtual environment ($(python --version))..."
+    python -m venv backend/venv
+fi
+echo "Installing Python dependencies..."
+backend/venv/bin/pip install --upgrade pip -q
+backend/venv/bin/pip install -r backend/requirements.txt
+# Chatterbox pins numpy<1.26 / torch==2.6 which break on Python 3.12+
+backend/venv/bin/pip install --no-deps chatterbox-tts
+# HumeAI TADA pins torch>=2.7,<2.8 which conflicts with our torch>=2.1
+backend/venv/bin/pip install --no-deps hume-tada
+# Apple Silicon: install MLX backend
+if [ "$(uname -m)" = "arm64" ] && [ "$(uname)" = "Darwin" ]; then
+    echo "Detected Apple Silicon — installing MLX dependencies..."
+    backend/venv/bin/pip install -r backend/requirements-mlx.txt
+fi
+backend/venv/bin/pip install git+https://github.com/QwenLM/Qwen3-TTS.git
+backend/venv/bin/pip install pyinstaller ruff pytest pytest-asyncio -q
+echo "Python environment ready."
+'''
+
+[tasks.setup-js]
+description = "Install JavaScript dependencies"
+run = "bun install"
+
+# ─── Development ──────────────────────────────────────────────────────
+
+[tasks.dev]
+description = "Start backend (if not running) + Tauri desktop app"
+depends = ["_ensure-venv", "_ensure-sidecar"]
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+backend_pid=""
+if curl -sf http://127.0.0.1:17493/health > /dev/null 2>&1; then
+    echo "Backend already running on http://localhost:17493"
+else
+    echo "Starting backend on http://localhost:17493 ..."
+    backend/venv/bin/uvicorn backend.main:app --reload --port 17493 &
+    backend_pid=$!
+    sleep 2
+fi
+trap '[ -n "$backend_pid" ] && kill "$backend_pid" 2>/dev/null; wait' EXIT
+echo "Starting Tauri desktop app..."
+cd tauri && bun run tauri dev
+'''
+
+[tasks.dev-backend]
+description = "Start backend only (uvicorn, --reload)"
+depends = ["_ensure-venv"]
+run = "backend/venv/bin/uvicorn backend.main:app --reload --port 17493"
+
+[tasks.dev-frontend]
+description = "Start Tauri desktop app only (backend must be running)"
+depends = ["_ensure-sidecar"]
+dir = "tauri"
+run = "bun run tauri dev"
+
+[tasks.dev-web]
+description = "Start backend (if not running) + web app (no Tauri)"
+depends = ["_ensure-venv"]
+run = '''
+#!/usr/bin/env bash
+set -euo pipefail
+backend_pid=""
+if curl -sf http://127.0.0.1:17493/health > /dev/null 2>&1; then
+    echo "Backend already running on http://localhost:17493"
+else
+    echo "Starting backend on http://localhost:17493 ..."
+    backend/venv/bin/uvicorn backend.main:app --reload --port 17493 &
+    backend_pid=$!
+    sleep 2
+fi
+trap '[ -n "$backend_pid" ] && kill "$backend_pid" 2>/dev/null; wait' EXIT
+cd web && bun run dev
+'''
+
+[tasks.kill]
+description = "Kill all dev processes (uvicorn + vite)"
+run = '''
+#!/usr/bin/env bash
+pkill -f "uvicorn backend.main:app" 2>/dev/null || true
+pkill -f "vite" 2>/dev/null || true
+echo "Dev processes killed."
+'''
+
+# ─── Code Quality ────────────────────────────────────────────────────
+
+[tasks.check]
+description = "Run all checks (JS + Python)"
+depends = ["check-js", "check-python"]
+
+[tasks.check-js]
+description = "JS/TS lint + format + typecheck (Biome)"
+run = "bun run check"
+
+[tasks.check-python]
+description = "Python lint + format check (ruff)"
+depends = ["_ensure-venv"]
+run = '''
+backend/venv/bin/ruff check backend
+backend/venv/bin/ruff format --check backend
+'''
+
+[tasks.lint]
+description = "Lint with Biome (JS) + ruff (Python)"
+depends = ["_ensure-venv"]
+run = '''
+bun run lint
+backend/venv/bin/ruff check backend
+'''
+
+[tasks.format]
+description = "Format with Biome (JS) + ruff (Python)"
+depends = ["_ensure-venv"]
+run = '''
+bun run format
+backend/venv/bin/ruff format backend
+'''
+
+[tasks.fix]
+description = "Auto-fix lint + format (JS + Python)"
+depends = ["_ensure-venv"]
+run = '''
+bun run check:fix
+backend/venv/bin/ruff check backend --fix
+backend/venv/bin/ruff format backend
+'''
+
+# ─── Tests ────────────────────────────────────────────────────────────
+
+[tasks.test]
+description = "Run Python tests"
+depends = ["_ensure-venv"]
+run = "backend/venv/bin/python -m pytest backend/tests -v"
+
+[tasks.test-add-samples]
+description = "Run only the MCP add-voice-samples tests"
+depends = ["_ensure-venv"]
+run = "backend/venv/bin/python -m pytest backend/tests/test_mcp_add_samples.py -v"
+
+# ─── Database ─────────────────────────────────────────────────────────
+
+[tasks.db-init]
+description = "Initialize SQLite database"
+depends = ["_ensure-venv"]
+run = 'backend/venv/bin/python -c "from backend.database import init_db; init_db()"'
+
+[tasks.db-reset]
+description = "Reset database (delete + reinit)"
+depends = ["_ensure-venv"]
+run = '''
+#!/usr/bin/env bash
+rm -f backend/data/voicebox.db
+backend/venv/bin/python -c "from backend.database import init_db; init_db()"
+'''
+
+# ─── Build ────────────────────────────────────────────────────────────
+
+[tasks.build]
+description = "Build everything (server binary + desktop app)"
+depends = ["build-server", "build-tauri"]
+
+[tasks.build-server]
+description = "Build Python server binary (CPU)"
+depends = ["_ensure-venv"]
+run = 'PATH="$PWD/backend/venv/bin:$PATH" ./scripts/build-server.sh'
+
+[tasks.build-tauri]
+description = "Build Tauri desktop app"
+dir = "tauri"
+run = "bun run tauri build"
+
+[tasks.build-web]
+description = "Build web app"
+dir = "web"
+run = "bun run build"
+
+# ─── Utilities ────────────────────────────────────────────────────────
+
+[tasks.docs]
+description = "Open API docs in browser"
+run = "open http://localhost:17493/docs"
+
+[tasks.logs]
+description = "Tail backend logs"
+run = 'tail -f backend/logs/*.log 2>/dev/null || echo "No log files found"'
+
+# ─── Internal helpers (hidden) ─────────────────────────────────────────
+
+[tasks._ensure-venv]
+hide = true
+run = '''
+#!/usr/bin/env bash
+if [ ! -d "backend/venv" ]; then
+    echo "Python venv not found. Run: mise run setup"
+    exit 1
+fi
+'''
+
+[tasks._ensure-sidecar]
+hide = true
+description = "Ensure Tauri dev sidecar placeholder exists"
+run = "bun run setup:dev"

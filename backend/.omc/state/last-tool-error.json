@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"cd /Users/delavalom/delavalom-labs/voicebox && /tmp/vbtest/bin/ruff check --fix backend/mcp_server/tools.py backend/tests/test_mcp_add_samples.py 2>&1 | tail -20; echo \\\"=== remaining ===\\...",
+  "error": "Exit code 1\n129 |     clip = _write_tone(env.tmp / \"good.wav\", 6.0)\n130 |\n131 |     with pytest.raises(ValueError) as exc:\n    |                        ^^^^^^^^^^\n132 |         await tools._add_voice_samples(\n133 |             profile=\"Kokoro Adam\",\n    |\n\nF841 Local variable `clip` is assigned to but never used\n   --> backend/tests/test_mcp_add_samples.py:226:5\n    |\n225 |     profile = _make_profile(env.db)\n226 |     clip = _write_tone(env.tmp / \"good.wav\", 6.0)\n    |     ^^^^\n227 |     encode...",
+  "timestamp": "2026-05-30T14:53:55.333Z",
+  "retry_count": 1
+}

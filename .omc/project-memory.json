@@ -1,0 +1,489 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1780145687694,
+  "projectRoot": "/Users/delavalom/delavalom-labs/voicebox",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      },
+      {
+        "name": "Python",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "requirements.txt"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "npm run build",
+    "testCommand": null,
+    "lintCommand": "npm run lint",
+    "devCommand": "npm run dev",
+    "scripts": {
+      "dev": "bun run setup:dev && cd tauri && bun run tauri dev",
+      "dev:web": "cd web && bun run dev",
+      "dev:landing": "cd landing && bun run dev",
+      "dev:server": "uvicorn backend.main:app --reload --port 17493",
+      "setup:dev": "bun run scripts/setup-dev-sidecar.js",
+      "build": "./scripts/build-server.sh && cd tauri && bun run tauri build",
+      "build:web": "cd web && bun run build",
+      "build:landing": "cd landing && bun run build",
+      "build:release": "./scripts/prepare-release.sh",
+      "generate:api": "./scripts/generate-api.sh",
+      "generate:keys": "cd tauri && bun tauri signer generate -w ~/.tauri/voicebox.key",
+      "build:server": "./scripts/build-server.sh",
+      "update:icons": "./scripts/update-icons.sh",
+      "convert:assets": "./scripts/convert-assets.sh",
+      "lint": "biome lint .",
+      "typecheck": "bunx tsc -p app/tsconfig.json --noEmit && cd web && bunx tsc --noEmit",
+      "lint:fix": "biome lint --write .",
+      "format": "biome format --write .",
+      "format:check": "biome format .",
+      "check": "biome check .",
+      "check:fix": "biome check --write .",
+      "ci": "bun run typecheck && bun run build:web"
+    }
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": true,
+    "workspaces": [
+      "app",
+      "tauri",
+      "web",
+      "landing"
+    ],
+    "mainDirectories": [
+      "app",
+      "docs",
+      "scripts"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "app": {
+      "path": "app",
+      "purpose": "Application code",
+      "fileCount": 6,
+      "lastAccessed": 1780145687655,
+      "keyFiles": [
+        "components.json",
+        "index.html",
+        "package.json",
+        "tsconfig.json",
+        "tsconfig.node.json"
+      ]
+    },
+    "backend": {
+      "path": "backend",
+      "purpose": null,
+      "fileCount": 15,
+      "lastAccessed": 1780145687657,
+      "keyFiles": [
+        "README.md",
+        "STYLE_GUIDE.md",
+        "__init__.py",
+        "app.py",
+        "build_binary.py"
+      ]
+    },
+    "data": {
+      "path": "data",
+      "purpose": "Data files",
+      "fileCount": 1,
+      "lastAccessed": 1780145687658,
+      "keyFiles": []
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 12,
+      "lastAccessed": 1780145687668,
+      "keyFiles": [
+        "PROJECT_STATUS.md",
+        "README.md",
+        "bun.lock",
+        "cli.json",
+        "mdx-components.tsx"
+      ]
+    },
+    "landing": {
+      "path": "landing",
+      "purpose": null,
+      "fileCount": 9,
+      "lastAccessed": 1780145687669,
+      "keyFiles": [
+        "README.md",
+        "components.json",
+        "next.config.js",
+        "nixpacks.toml",
+        "package.json"
+      ]
+    },
+    "scripts": {
+      "path": "scripts",
+      "purpose": "Build/utility scripts",
+      "fileCount": 8,
+      "lastAccessed": 1780145687670,
+      "keyFiles": [
+        "build-server.sh",
+        "convert-assets.sh",
+        "generate-api.sh",
+        "package_cuda.py",
+        "prepare-release.sh"
+      ]
+    },
+    "tauri": {
+      "path": "tauri",
+      "purpose": null,
+      "fileCount": 5,
+      "lastAccessed": 1780145687671,
+      "keyFiles": [
+        "index.html",
+        "package.json",
+        "tsconfig.json",
+        "tsconfig.node.json",
+        "vite.config.ts"
+      ]
+    },
+    "web": {
+      "path": "web",
+      "purpose": null,
+      "fileCount": 5,
+      "lastAccessed": 1780145687672,
+      "keyFiles": [
+        "index.html",
+        "package.json",
+        "tsconfig.json",
+        "tsconfig.node.json",
+        "vite.config.ts"
+      ]
+    },
+    "app/src": {
+      "path": "app/src",
+      "purpose": "Source code",
+      "fileCount": 5,
+      "lastAccessed": 1780145687675,
+      "keyFiles": [
+        "App.tsx",
+        "global.d.ts",
+        "index.css"
+      ]
+    },
+    "docs/app": {
+      "path": "docs/app",
+      "purpose": "Application code",
+      "fileCount": 2,
+      "lastAccessed": 1780145687678,
+      "keyFiles": [
+        "global.css",
+        "layout.tsx"
+      ]
+    },
+    "docs/components": {
+      "path": "docs/components",
+      "purpose": "UI components",
+      "fileCount": 2,
+      "lastAccessed": 1780145687679,
+      "keyFiles": [
+        "api-page.client.tsx",
+        "api-page.tsx"
+      ]
+    },
+    "docs/lib": {
+      "path": "docs/lib",
+      "purpose": "Library code",
+      "fileCount": 4,
+      "lastAccessed": 1780145687680,
+      "keyFiles": [
+        "cn.ts",
+        "layout.shared.tsx",
+        "openapi.ts"
+      ]
+    },
+    "landing/public": {
+      "path": "landing/public",
+      "purpose": "Public files",
+      "fileCount": 10,
+      "lastAccessed": 1780145687683,
+      "keyFiles": [
+        "App.png",
+        "VoiceBoxAppScreenshot.webp",
+        "apple-touch-icon.png"
+      ]
+    },
+    "landing/src": {
+      "path": "landing/src",
+      "purpose": "Source code",
+      "fileCount": 0,
+      "lastAccessed": 1780145687685,
+      "keyFiles": []
+    },
+    "tauri/assets": {
+      "path": "tauri/assets",
+      "purpose": "Static assets",
+      "fileCount": 1,
+      "lastAccessed": 1780145687693,
+      "keyFiles": [
+        "Voicebox_Microphone.png"
+      ]
+    },
+    "tauri/src": {
+      "path": "tauri/src",
+      "purpose": "Source code",
+      "fileCount": 1,
+      "lastAccessed": 1780145687694,
+      "keyFiles": [
+        "main.tsx"
+      ]
+    },
+    "web/src": {
+      "path": "web/src",
+      "purpose": "Source code",
+      "fileCount": 1,
+      "lastAccessed": 1780145687694,
+      "keyFiles": [
+        "main.tsx"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "backend/services/profiles.py",
+      "accessCount": 6,
+      "lastAccessed": 1780146165552,
+      "type": "file"
+    },
+    {
+      "path": "backend/mcp_server/tools.py",
+      "accessCount": 5,
+      "lastAccessed": 1780146379804,
+      "type": "file"
+    },
+    {
+      "path": "backend/backends/pytorch_backend.py",
+      "accessCount": 4,
+      "lastAccessed": 1780145790890,
+      "type": "file"
+    },
+    {
+      "path": "backend/database/models.py",
+      "accessCount": 4,
+      "lastAccessed": 1780145794692,
+      "type": "file"
+    },
+    {
+      "path": "backend/backends/mlx_backend.py",
+      "accessCount": 3,
+      "lastAccessed": 1780145784084,
+      "type": "file"
+    },
+    {
+      "path": "backend/utils/audio.py",
+      "accessCount": 3,
+      "lastAccessed": 1780145795071,
+      "type": "file"
+    },
+    {
+      "path": "mise.toml",
+      "accessCount": 3,
+      "lastAccessed": 1780154660825,
+      "type": "file"
+    },
+    {
+      "path": "backend/routes/mcp_bindings.py",
+      "accessCount": 2,
+      "lastAccessed": 1780145761884,
+      "type": "file"
+    },
+    {
+      "path": "backend/app.py",
+      "accessCount": 2,
+      "lastAccessed": 1780145763669,
+      "type": "file"
+    },
+    {
+      "path": "backend/backends/base.py",
+      "accessCount": 2,
+      "lastAccessed": 1780145772764,
+      "type": "file"
+    },
+    {
+      "path": "backend/mcp_server/resolve.py",
+      "accessCount": 2,
+      "lastAccessed": 1780146279542,
+      "type": "file"
+    },
+    {
+      "path": "backend/mcp_server/server.py",
+      "accessCount": 1,
+      "lastAccessed": 1780145743377,
+      "type": "file"
+    },
+    {
+      "path": "backend/mcp_server/__init__.py",
+      "accessCount": 1,
+      "lastAccessed": 1780145743779,
+      "type": "file"
+    },
+    {
+      "path": "backend/mcp_server/context.py",
+      "accessCount": 1,
+      "lastAccessed": 1780145746613,
+      "type": "file"
+    },
+    {
+      "path": "backend/mcp_server/events.py",
+      "accessCount": 1,
+      "lastAccessed": 1780145747025,
+      "type": "file"
+    },
+    {
+      "path": "backend/pyproject.toml",
+      "accessCount": 1,
+      "lastAccessed": 1780145752841,
+      "type": "file"
+    },
+    {
+      "path": "backend/routes/profiles.py",
+      "accessCount": 1,
+      "lastAccessed": 1780145755354,
+      "type": "file"
+    },
+    {
+      "path": "backend/backends/luxtts_backend.py",
+      "accessCount": 1,
+      "lastAccessed": 1780145755505,
+      "type": "file"
+    },
+    {
+      "path": "backend/models.py",
+      "accessCount": 1,
+      "lastAccessed": 1780145755589,
+      "type": "file"
+    },
+    {
+      "path": "backend/services/transcribe.py",
+      "accessCount": 1,
+      "lastAccessed": 1780145761703,
+      "type": "file"
+    },
+    {
+      "path": "backend/services/captures.py",
+      "accessCount": 1,
+      "lastAccessed": 1780145762094,
+      "type": "file"
+    },
+    {
+      "path": "backend/routes/captures.py",
+      "accessCount": 1,
+      "lastAccessed": 1780145762984,
+      "type": "file"
+    },
+    {
+      "path": "backend/backends/__init__.py",
+      "accessCount": 1,
+      "lastAccessed": 1780145772558,
+      "type": "file"
+    },
+    {
+      "path": "app/src/components/VoiceProfiles/SampleUpload.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1780145780273,
+      "type": "file"
+    },
+    {
+      "path": "app/src/lib/api/services/DefaultService.ts",
+      "accessCount": 1,
+      "lastAccessed": 1780145780535,
+      "type": "file"
+    },
+    {
+      "path": "backend/backends/qwen_custom_voice_backend.py",
+      "accessCount": 1,
+      "lastAccessed": 1780145784801,
+      "type": "file"
+    },
+    {
+      "path": "backend/tests/test_whisper_download.py",
+      "accessCount": 1,
+      "lastAccessed": 1780145786697,
+      "type": "file"
+    },
+    {
+      "path": "backend/config.py",
+      "accessCount": 1,
+      "lastAccessed": 1780145791580,
+      "type": "file"
+    },
+    {
+      "path": "backend/tests/test_audio_preprocess.py",
+      "accessCount": 1,
+      "lastAccessed": 1780145797347,
+      "type": "file"
+    },
+    {
+      "path": "backend/routes/speak.py",
+      "accessCount": 1,
+      "lastAccessed": 1780145799451,
+      "type": "file"
+    },
+    {
+      "path": "backend/routes/generations.py",
+      "accessCount": 1,
+      "lastAccessed": 1780145804252,
+      "type": "file"
+    },
+    {
+      "path": "backend/routes/audio.py",
+      "accessCount": 1,
+      "lastAccessed": 1780145805644,
+      "type": "file"
+    },
+    {
+      "path": "backend/routes/transcription.py",
+      "accessCount": 1,
+      "lastAccessed": 1780145805720,
+      "type": "file"
+    },
+    {
+      "path": "backend/services/generation.py",
+      "accessCount": 1,
+      "lastAccessed": 1780145807528,
+      "type": "file"
+    },
+    {
+      "path": "backend/services/task_queue.py",
+      "accessCount": 1,
+      "lastAccessed": 1780145811449,
+      "type": "file"
+    },
+    {
+      "path": "backend/utils/cache.py",
+      "accessCount": 1,
+      "lastAccessed": 1780145814999,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}

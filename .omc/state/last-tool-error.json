@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"echo \\\"=== disk ===\\\"; df -h / /System/Volumes/Data 2>/dev/null | cat; echo; echo \\\"=== likely space hogs ===\\\"; du -sh /tmp/vbtest 2>/dev/null; du -sh ~/Library/Caches/pip 2>/dev/null; du...",
+  "error": "Exit code 1\n=== disk ===\nFilesystem        Size    Used   Avail Capacity iused ifree %iused  Mounted on\n/dev/disk3s3s1   460Gi    17Gi   1.4Gi    93%    455k   15M    3%   /\n/dev/disk3s1     460Gi   403Gi   1.4Gi   100%    4.9M   15M   25%   /System/Volumes/Data\n\n=== likely space hogs ===\n1.0G\t/tmp/vbtest\n762M\t/Users/delavalom/Library/Caches/pip\n4.3G\t/Users/delavalom/.cache/huggingface\n2.1G\t/Users/delavalom/delavalom-labs/voicebox/backend/venv\n1.9G\t/Users/delavalom/.local/share/mise",
+  "timestamp": "2026-05-30T15:23:13.628Z",
+  "retry_count": 1
+}

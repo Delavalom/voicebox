@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import base64 as b64
+import hashlib
 import logging
 import tempfile
 from pathlib import Path
@@ -18,12 +19,10 @@ from fastmcp import FastMCP
 
 from .. import models
 from ..database import get_db
-from ..services import captures as captures_service
-from ..services import profiles as profiles_service
+from ..services import captures as captures_service, profiles as profiles_service
 from . import events as mcp_events
 from .context import current_client_id, request_is_loopback
 from .resolve import resolve_profile
-
 
 logger = logging.getLogger(__name__)
 
@@ -216,6 +215,61 @@ def register_tools(mcp: FastMCP) -> None:
         finally:
             db.close()
 
+    @mcp.tool(
+        name="voicebox.add_voice_samples",
+        description=(
+            "Attach one or more audio clips to an existing CLONED voice "
+            "profile as training samples. Pass exactly one of `audio_paths` "
+            "(absolute local paths — loopback callers only) or `audio_base64` "
+            "(base64-encoded clips). Accepts opus/wav/mp3/m4a — clips are "
+            "transcoded to 24 kHz mono internally. Clips that fail the quality "
+            "gate (too short/long, silent) or duplicate an existing sample are "
+            "skipped with a per-clip reason rather than failing the batch. "
+            "Each sample needs a transcript: pass `labels` (index-aligned) or "
+            "leave `auto_transcribe` on to label via local Whisper. Set "
+            "`retrain=true` to re-encode the voice immediately (otherwise the "
+            "new samples apply on the next voicebox.speak)."
+        ),
+    )
+    async def voicebox_add_voice_samples(
+        profile: str,
+        audio_paths: list[str] | None = None,
+        audio_base64: list[str] | None = None,
+        labels: list[str] | None = None,
+        auto_transcribe: bool = True,
+        retrain: bool = False,
+        min_duration: float = 5.0,
+    ) -> dict[str, Any]:
+        """Add samples to a cloned profile. See the tool description."""
+        return await _add_voice_samples(
+            profile=profile,
+            audio_paths=audio_paths,
+            audio_base64=audio_base64,
+            labels=labels,
+            auto_transcribe=auto_transcribe,
+            retrain=retrain,
+            min_duration=min_duration,
+        )
+
+    @mcp.tool(
+        name="voicebox.retrain_voice",
+        description=(
+            "Re-encode a cloned voice profile from its current sample set and "
+            "return when ready. Voicebox uses zero-shot cloning, so this is a "
+            "fast synchronous re-encode (no long-running training job). Use "
+            "after adding samples across several calls to warm the voice once."
+        ),
+    )
+    async def voicebox_retrain_voice(profile: str) -> dict[str, Any]:
+        """Synchronously re-encode a cloned profile's voice prompt."""
+        db = next(get_db())
+        try:
+            vp = _resolve_cloned_profile(profile, db)
+            result = await profiles_service.warm_voice_prompt(vp.id, db)
+            return {"profile_id": vp.id, **result}
+        finally:
+            db.close()
+
 
 # ─── Speak helper ──────────────────────────────────────────────────────────
 
@@ -315,3 +369,203 @@ async def _transcribe_file(
         "language": language,
         "model": model_size,
     }
+
+
+# ─── Add-voice-samples helpers ───────────────────────────────────────────────
+
+
+def _resolve_cloned_profile(profile: str, db) -> Any:
+    """Resolve a profile arg to a cloned-voice ORM row, or raise ValueError.
+
+    Presets and designed voices can't take samples, so reject them with an
+    actionable message rather than silently no-op'ing.
+    """
+    vp = resolve_profile(profile, current_client_id.get(), db)
+    if vp is None:
+        raise ValueError(
+            f"No voice profile matched '{profile}'. Pass a profile name or id "
+            "from voicebox.list_profiles."
+        )
+    voice_type = getattr(vp, "voice_type", None) or "cloned"
+    if voice_type != "cloned":
+        raise ValueError(
+            f"Profile '{vp.name}' is a {voice_type} voice; only cloned voices "
+            "accept samples. Presets and designed voices can't be augmented."
+        )
+    return vp
+
+
+def _audio_file_hash(path: Path | str) -> str:
+    """SHA-256 of a file's raw bytes (streamed, for arbitrary clip sizes)."""
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+async def _add_voice_samples(
+    *,
+    profile: str,
+    audio_paths: list[str] | None,
+    audio_base64: list[str] | None,
+    labels: list[str] | None,
+    auto_transcribe: bool,
+    retrain: bool,
+    min_duration: float,
+) -> dict[str, Any]:
+    """Attach clips to a cloned profile with per-clip partial success.
+
+    Reuses the same ``add_profile_sample`` path the desktop UI calls, so
+    MCP-added samples land in exactly the same place. Dedupe hashes the
+    stored WAV representation (encode each candidate through the identical
+    ``save_audio`` used on insert, then hash the bytes) so re-running an
+    import is idempotent regardless of source container/codec.
+    """
+    from .. import config
+    from ..database import ProfileSample as DBProfileSample
+    from ..utils.audio import save_audio, validate_and_load_reference_audio
+
+    if bool(audio_paths) == bool(audio_base64):
+        raise ValueError("Pass exactly one of `audio_paths` or `audio_base64`.")
+
+    db = next(get_db())
+    tmp_paths: list[Path] = []
+    skipped: list[dict[str, Any]] = []
+    try:
+        vp = _resolve_cloned_profile(profile, db)
+        require_absolute = audio_paths is not None
+
+        # Materialize inputs into a (path, display-label) work list.
+        work: list[tuple[Path, str]] = []
+        if require_absolute:
+            if not request_is_loopback():
+                raise ValueError(
+                    "`audio_paths` is only available to loopback callers — "
+                    "remote callers must use `audio_base64`."
+                )
+            for raw in audio_paths:
+                work.append((Path(raw), str(raw)))
+        else:
+            for i, b64str in enumerate(audio_base64):
+                display = f"<base64[{i}]>"
+                try:
+                    data = b64.b64decode(b64str, validate=True)
+                except Exception as exc:
+                    skipped.append(
+                        {"path": display, "reason": f"invalid base64: {exc}"}
+                    )
+                    continue
+                if len(data) > MAX_TRANSCRIBE_BYTES:
+                    skipped.append(
+                        {
+                            "path": display,
+                            "reason": f"exceeds {MAX_TRANSCRIBE_BYTES // (1024 * 1024)} MB limit",
+                        }
+                    )
+                    continue
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
+                    tmp.write(data)
+                    tp = Path(tmp.name)
+                tmp_paths.append(tp)
+                work.append((tp, display))
+
+        # Hashes of the profile's existing stored samples — for idempotent re-imports.
+        existing_hashes: set[str] = set()
+        for s in db.query(DBProfileSample).filter_by(profile_id=vp.id).all():
+            stored = config.resolve_storage_path(s.audio_path)
+            if stored is not None and Path(stored).is_file():
+                try:
+                    existing_hashes.add(_audio_file_hash(stored))
+                except OSError:
+                    continue
+
+        added: list[dict[str, Any]] = []
+        for idx, (clip_path, display) in enumerate(work):
+            try:
+                if require_absolute and not clip_path.is_absolute():
+                    skipped.append(
+                        {"path": display, "reason": "path must be absolute"}
+                    )
+                    continue
+                if not clip_path.is_file():
+                    skipped.append({"path": display, "reason": "file not found"})
+                    continue
+                if clip_path.stat().st_size > MAX_TRANSCRIBE_BYTES:
+                    skipped.append(
+                        {
+                            "path": display,
+                            "reason": f"exceeds {MAX_TRANSCRIBE_BYTES // (1024 * 1024)} MB limit",
+                        }
+                    )
+                    continue
+
+                # Quality gate + preprocess, off the event loop.
+                ok, err, audio, sr = await asyncio.to_thread(
+                    validate_and_load_reference_audio, str(clip_path), min_duration
+                )
+                if not ok:
+                    skipped.append({"path": display, "reason": err})
+                    continue
+
+                # Content hash on the stored representation.
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as htmp:
+                    hpath = Path(htmp.name)
+                tmp_paths.append(hpath)
+                await asyncio.to_thread(save_audio, audio, str(hpath), sr)
+                clip_hash = _audio_file_hash(hpath)
+                if clip_hash in existing_hashes:
+                    skipped.append(
+                        {"path": display, "reason": "duplicate of an existing sample"}
+                    )
+                    continue
+
+                # Resolve the transcript/label.
+                label = None
+                if labels is not None and idx < len(labels) and labels[idx]:
+                    label = labels[idx]
+                elif auto_transcribe:
+                    transcription = await _transcribe_file(clip_path, None, None)
+                    label = (transcription.get("text") or "").strip()
+                if not label:
+                    skipped.append(
+                        {
+                            "path": display,
+                            "reason": "no label and auto_transcribe off (or empty transcript)",
+                        }
+                    )
+                    continue
+
+                sample = await profiles_service.add_profile_sample(
+                    vp.id, str(clip_path), label, db, min_duration=min_duration
+                )
+                existing_hashes.add(clip_hash)
+                added.append(
+                    {
+                        "path": display,
+                        "sample_id": sample.id,
+                        "duration_s": round(len(audio) / sr, 2),
+                        "label": label,
+                    }
+                )
+            except Exception as exc:
+                logger.exception("add_voice_samples: clip %s failed", display)
+                skipped.append({"path": display, "reason": str(exc)})
+
+        out: dict[str, Any] = {
+            "profile_id": vp.id,
+            "added": added,
+            "skipped": skipped,
+        }
+        if retrain and added:
+            out["retrain"] = await profiles_service.warm_voice_prompt(vp.id, db)
+        elif retrain:
+            out["retrain"] = {
+                "status": "skipped",
+                "reason": "no new samples were added",
+            }
+        return out
+    finally:
+        for tp in tmp_paths:
+            tp.unlink(missing_ok=True)
+        db.close()
