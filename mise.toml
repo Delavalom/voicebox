@@ -35,6 +35,12 @@ backend/venv/bin/pip install --no-deps hume-tada
 if [ "$(uname -m)" = "arm64" ] && [ "$(uname)" = "Darwin" ]; then
     echo "Detected Apple Silicon — installing MLX dependencies..."
     backend/venv/bin/pip install -r backend/requirements-mlx.txt
+    # mlx-lm and mlx-audio declare transformers>=5.x, conflicting with our
+    # <=4.57.x cap, so install them --no-deps (matches .github/workflows/release.yml).
+    # Without these, mlx_audio.stt/tts fail to import and every model
+    # download (which lazily loads the model) errors with ModuleNotFoundError.
+    backend/venv/bin/pip install --no-deps mlx-lm==0.31.1
+    backend/venv/bin/pip install --no-deps mlx-audio==0.4.1
 fi
 backend/venv/bin/pip install git+https://github.com/QwenLM/Qwen3-TTS.git
 backend/venv/bin/pip install pyinstaller ruff pytest pytest-asyncio -q
